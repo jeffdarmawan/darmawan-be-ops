@@ -33,7 +33,10 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: naikbusaja_prod
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # PG18 images keep data in a version-specific subdir (PGDATA
+      # /var/lib/postgresql/18/docker) and expect the volume HERE, not at
+      # /var/lib/postgresql/data like 16 did.
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d naikbusaja_prod"]
       interval: 5s

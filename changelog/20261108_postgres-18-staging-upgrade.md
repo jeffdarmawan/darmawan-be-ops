@@ -10,6 +10,7 @@ Both staging databases move from Postgres 16 to 18.
 - `staging/apps/naikbusaja/docker-compose.staging.yml`: `postgis/postgis:16-3.4` → `postgis/postgis:18-3.6` (18-3.6 is published for linux/amd64, which is all the staging host needs, so the existing `platform:` pin stays)
 - `staging/apps/maribelanja/docker-compose.staging.yml`: `postgres:16-alpine` → `postgres:18-alpine`
 - Both `db` services get `shm_size: "256mb"`: PG18's async I/O (io_method=worker default) allocates from /dev/shm, and Docker's 64MB default is a known cause of "could not resize shared memory segment" startup failures
+- Both `db` services move their volume mount from `/var/lib/postgresql/data` to `/var/lib/postgresql`: the official 18 images changed PGDATA to a version-specific path (`/var/lib/postgresql/18/docker`, pg_ctlcluster-style) and mount the `VOLUME` at `/var/lib/postgresql`. With the old mount the entrypoint refuses to start: "Error: in 18+, these Docker images are configured to store database data in a format which is compatible with pg_ctlcluster... there appears to be PostgreSQL data in /var/lib/postgresql/data (unused mount/volume)". First discovered on the real upgrade, not anticipated — caught because the db healthcheck failed and the entrypoint error was in the logs.
 - `staging/scripts/upgrade-postgres-18.sh` + two Makefile targets do the dump / wipe / restore
 - Topology diagram in `staging/README.md` updated to match
 

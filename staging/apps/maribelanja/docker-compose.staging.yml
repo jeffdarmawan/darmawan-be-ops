@@ -45,7 +45,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-maribelanja}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # PG18 images keep data in a version-specific subdir (PGDATA
+      # /var/lib/postgresql/18/docker) and expect the volume HERE, not at
+      # /var/lib/postgresql/data like 16 did.
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test:
         ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-maribelanja}"]
