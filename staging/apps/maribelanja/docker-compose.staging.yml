@@ -1,0 +1,102 @@
+# Maribelanja staging stack — same shape as docker-compose.prod.yml, minus
+# Caddy (the shared Caddy proxy owns 80/443) and with Mailpit as the real
+# staging SMTP so password resets work without a provider.
+#
+# The app publishes no ports: Caddy reaches it by container name over the
+# shared external "proxy" network. Mailpit's UI is loopback-only — read
+# magic links through an SSH tunnel:
+#
+#   ssh -L 8025:127.0.0.1:8025 ubuntu@<staging-host>   →  http://localhost:8025
+#
+#   docker compose -f docker-compose.staging.yml up -d --build
+
+name: maribelanja
+
+x-app-env: &app-env
+  DATABASE_URL: ecto://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-maribelanja}
+  SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE is required (mix phx.gen.secret)}
+  PHX_HOST: ${PHX_HOST:?PHX_HOST is required, e.g. maribelanja.darmawan.be}
+  PORT: "4000"
+  POOL_SIZE: ${POOL_SIZE:-10}
+  MAIL_FROM: ${MAIL_FROM:?MAIL_FROM is required}
+  SMTP_HOST: ${SMTP_HOST:-mailpit}
+  SMTP_PORT: ${SMTP_PORT:-1025}
+  SMTP_SSL: ${SMTP_SSL:-false}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-maribelanja}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-maribelanja}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # Runs once per deploy, before the app boots. Never re-runs on restart.
+  migrate:
+    build:
+      context: .
+    image: maribelanja:latest
+    command: ["/app/bin/migrate"]
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    <<: *logging
+
+  app:
+    build:
+      context: .
+    image: maribelanja:latest
+    container_name: maribelanja-app
+    restart: unless-stopped
+    <<: *logging
+    environment: *app-env
+    networks:
+      - default
+      - proxy
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+
+  # Staging mail catcher — also the SMTP relay (SMTP_HOST=mailpit). UI is
+  # loopback-only on purpose: magic links are readable through the SSH tunnel.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    <<: *logging
+    ports:
+      - "127.0.0.1:8025:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+volumes:
+  pgdata:
+
+networks:
+  proxy:
+    external: true

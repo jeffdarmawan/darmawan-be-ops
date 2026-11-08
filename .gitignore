@@ -1,0 +1,8 @@
+# ZCode session state
+.zcode/
+
+# Python
+__pycache__/
+
+# OS junk
+.DS_Store

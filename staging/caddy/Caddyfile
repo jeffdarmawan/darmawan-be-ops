@@ -1,0 +1,67 @@
+# Shared staging reverse proxy for the darmawan.be apps.
+#
+# Automatic HTTPS handles certificate issuance/renewal and redirects all
+# HTTP to HTTPS. Apps are reached by container name over the shared external
+# "proxy" Docker network — each app's staging compose attaches its app
+# container to it and publishes no ports of its own.
+#
+# __NAIKBUSAJA_DEV_BCRYPT__ is replaced by `make caddy` (staging/Makefile)
+# with a bcrypt hash protecting naikbusaja's dev routes on the public
+# internet. Credentials: /opt/caddy/dev-auth-credentials.txt on the server.
+
+{
+	# Staging uses the default Let's Encrypt issuer. If certificates get
+	# re-issued often (rebuilt boxes), pin an email for expiry notices:
+	# email you@example.com
+}
+
+maribelanja.darmawan.be {
+	encode zstd gzip
+
+	reverse_proxy maribelanja-app:4000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	header {
+		# HSTS is also set by Phoenix's force_ssl; keep it explicit here.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+naikbusaja.darmawan.be {
+	encode zstd gzip
+
+	# The staging build compiles in the dev routes (LiveDashboard at
+	# /dev/dashboard, Swoosh mailbox at /dev/mailbox) so magic-link logins
+	# work without SMTP. Keep them behind basic auth.
+	@dev path /dev/*
+	basic_auth @dev {
+		naikbusaja __NAIKBUSAJA_DEV_BCRYPT__
+	}
+
+	reverse_proxy naikbusaja-app:4000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

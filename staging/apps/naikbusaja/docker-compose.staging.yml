@@ -1,0 +1,78 @@
+# NaikBusAja staging stack — shared Caddy fronts this app, so the app
+# publishes no ports itself; Caddy reaches it by container name over the
+# shared external "proxy" network.
+#
+#   docker compose -f docker-compose.staging.yml up -d --build
+#
+# Demo build: DEV_ROUTES_COMPILE + MAIL_LOCAL_COMPILE bake in /dev/mailbox so
+# magic-link logins work without SMTP (both are read at COMPILE time). The
+# /dev/* routes are gated by Caddy basic auth (see staging/caddy/Caddyfile).
+# First boot runs migrations and imports the transit feed (a few minutes).
+
+name: naikbusaja
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    # Published for linux/amd64 only — matches the staging host.
+    platform: linux/amd64
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: naikbusaja_prod
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d naikbusaja_prod"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      args:
+        # Demo image: dev routes + in-memory mail for the login flow.
+        DEV_ROUTES_COMPILE: "true"
+        MAIL_LOCAL_COMPILE: "true"
+        ELIXIR_VERSION: "1.18.6"
+        OTP_VERSION: "27.3.4.19"
+    container_name: naikbusaja-app
+    restart: unless-stopped
+    <<: *logging
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ecto://postgres:postgres@db:5432/naikbusaja_prod
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE is required (mix phx.gen.secret)}
+      PHX_HOST: ${PHX_HOST:?PHX_HOST is required, e.g. naikbusaja.darmawan.be}
+      PHX_SCHEME: ${PHX_SCHEME:-https}
+      PORT: "4000"
+      POOL_SIZE: "10"
+    entrypoint: ["/app/bin/docker-entrypoint"]
+    command: ["/app/bin/server"]
+    networks:
+      - default
+      - proxy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+
+networks:
+  proxy:
+    external: true

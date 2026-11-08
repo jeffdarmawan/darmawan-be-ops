@@ -1,0 +1,32 @@
+# Shared staging reverse proxy — the only thing on ports 80/443.
+#
+# Caddy obtains and renews Let's Encrypt certificates automatically for both
+# hostnames (DNS must point here). Apps are reached by container name over the
+# shared external "proxy" network (see apps/*/docker-compose.staging.yml).
+#
+#   docker compose up -d
+#   docker compose logs -f caddy | grep -i certificate
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  caddy_data:
+  caddy_config:
