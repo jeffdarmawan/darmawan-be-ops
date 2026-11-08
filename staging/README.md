@@ -4,25 +4,38 @@ One small EC2 instance hosting both apps behind a single Caddy reverse proxy.
 Config lives in this repo; the Mac is the control plane and `rsync` over SSH
 is the deploy mechanism — nothing is cloned from GitHub on the box.
 
-```
-                 Internet (80/443 — open in the EC2 security group)
-                        │
-        47.131.158.206  │  Ubuntu 26.04, 2 vCPU, 3.7 GB RAM
-                        │
-               ┌── caddy-proxy (this repo: staging/caddy) ──┐
-               │        Let's Encrypt: automatic            │
-               │                                            │
- naikbusaja.darmawan.be                        maribelanja.darmawan.be
-        │                                              │
- naikbusaja-app:4000 (demo build:                maribelanja-app:4000
- /dev/dashboard, /dev/mailbox behind                       │
- Caddy basic auth; in-memory mail)                 mailpit (SMTP relay,
-        │                                          UI loopback-only)
- postgis 16-3.4 (pgdata volume)                          │
-                                                postgres:16 (pgdata volume)
+```mermaid
+flowchart LR
+    internet(["Internet<br/>:80 / :443 — open in the EC2 security group"])
 
- shared external docker network: "proxy" — the only bridge between stacks
+    subgraph host["47.131.158.206 — Ubuntu 26.04 · 2 vCPU · 3.7 GB RAM"]
+        direction TB
+        caddy["caddy-proxy (this repo: staging/caddy)<br/>Let's Encrypt: automatic"]
+
+        subgraph nb["naikbusaja.darmawan.be"]
+            direction TB
+            nbapp["naikbusaja-app:4000<br/>demo build — /dev/dashboard +<br/>/dev/mailbox behind Caddy basic auth,<br/>in-memory mail"]
+            nbdb[("postgis 16-3.4<br/>pgdata volume")]
+        end
+
+        subgraph mb["maribelanja.darmawan.be"]
+            direction TB
+            mbapp["maribelanja-app:4000"]
+            mbdb[("postgres:16<br/>pgdata volume")]
+            mp["mailpit — SMTP relay,<br/>UI loopback-only (ssh -L 8025)"]
+        end
+    end
+
+    internet --> caddy
+    caddy -->|"proxy network"| nbapp
+    caddy -->|"proxy network"| mbapp
+    nbapp --> nbdb
+    mbapp --> mbdb
+    mbapp -->|"SMTP :1025"| mp
 ```
+
+*The shared external docker network `proxy` is the only bridge between the
+stacks — both `caddy-proxy → app` edges cross it.*
 
 ## Server layout
 
