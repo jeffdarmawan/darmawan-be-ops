@@ -34,9 +34,12 @@ x-logging: &logging
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     <<: *logging
+    # PG18's async I/O (io_method=worker) lives in /dev/shm; the 64MB Docker
+    # default is too small and fails server startup.
+    shm_size: "256mb"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}

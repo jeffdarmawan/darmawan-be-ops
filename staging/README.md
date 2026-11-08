@@ -15,13 +15,13 @@ flowchart LR
         subgraph nb["naikbusaja.darmawan.be"]
             direction TB
             nbapp["naikbusaja-app:4000<br/>demo build — /dev/dashboard +<br/>/dev/mailbox behind Caddy basic auth,<br/>in-memory mail"]
-            nbdb[("postgis 16-3.4<br/>pgdata volume")]
+            nbdb[("postgis 18-3.6<br/>pgdata volume")]
         end
 
         subgraph mb["maribelanja.darmawan.be"]
             direction TB
             mbapp["maribelanja-app:4000"]
-            mbdb[("postgres:16<br/>pgdata volume")]
+            mbdb[("postgres:18<br/>pgdata volume")]
             mp["mailpit — SMTP relay,<br/>UI loopback-only (ssh -L 8025)"]
         end
     end

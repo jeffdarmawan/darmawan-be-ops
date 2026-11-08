@@ -20,11 +20,14 @@ x-logging: &logging
 
 services:
   db:
-    image: postgis/postgis:16-3.4
+    image: postgis/postgis:18-3.6
     # Published for linux/amd64 only — matches the staging host.
     platform: linux/amd64
     restart: unless-stopped
     <<: *logging
+    # PG18's async I/O (io_method=worker) lives in /dev/shm; the 64MB Docker
+    # default is too small and fails server startup.
+    shm_size: "256mb"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

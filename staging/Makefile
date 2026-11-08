@@ -30,7 +30,7 @@ APP_EXCLUDES = --exclude .git --exclude .DS_Store --exclude _build --exclude dep
 CADDY_EXCLUDES = --exclude .DS_Store --exclude .dev-bcrypt --exclude dev-auth-credentials.txt
 
 .PHONY: help check bootstrap secrets caddy naikbusaja maribelanja deploy ssh \
-        ps logs-caddy logs-naikbusaja logs-maribelanja
+        ps logs-caddy logs-naikbusaja logs-maribelanja pg18-dump pg18-upgrade
 
 help:
 	@echo "make check          - SSH reachability + docker + port 80/443 state"
@@ -43,6 +43,8 @@ help:
 	@echo "make ssh            - shell on the staging box"
 	@echo "make ps             - container status for all three stacks"
 	@echo "make logs-caddy | logs-naikbusaja | logs-maribelanja"
+	@echo "make pg18-dump      - back up user rows from both staging DBs (FULL=1 for whole DB)"
+	@echo "make pg18-upgrade APP=... - wipe + PG18 re-init + restore for one app (destructive)"
 
 check:
 	@echo "== ssh =="
@@ -81,6 +83,20 @@ maribelanja:
 	@echo "maribelanja deployed — mail: ssh -L 8025:127.0.0.1:8025 $(HOST) → http://localhost:8025"
 
 deploy: naikbusaja maribelanja
+
+# Postgres 16 -> 18. Dump first (both apps), then upgrade one app at a time.
+# The upgrade target syncs the PG18 compose file to the server before the
+# script runs, and the script refuses to wipe a cluster unless that file is
+# already on 18 and a dump exists. Full playbook:
+# changelog/20261108_postgres-18-staging-upgrade.md
+pg18-dump:
+	$(SSH) 'MODE=dump APP=naikbusaja FULL=$(FULL) bash -s' < scripts/upgrade-postgres-18.sh
+	$(SSH) 'MODE=dump APP=maribelanja FULL=$(FULL) bash -s' < scripts/upgrade-postgres-18.sh
+
+pg18-upgrade:
+	@test -n "$(APP)" || { echo "usage: make pg18-upgrade APP=naikbusaja|maribelanja (run make pg18-dump first)"; exit 1; }
+	$(RSYNC) apps/$(APP)/docker-compose.staging.yml $(HOST):/opt/$(APP)/docker-compose.staging.yml
+	$(SSH) 'MODE=upgrade APP=$(APP) bash -s' < scripts/upgrade-postgres-18.sh
 
 ssh:
 	$(SSH)
