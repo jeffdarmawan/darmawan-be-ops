@@ -14,8 +14,9 @@ flowchart LR
 
         subgraph nb["naikbusaja.darmawan.be"]
             direction TB
-            nbapp["naikbusaja-app:4000<br/>demo build — /dev/dashboard +<br/>/dev/mailbox behind Caddy basic auth,<br/>in-memory mail"]
+            nbapp["naikbusaja-app:4000<br/>demo build — /dev/dashboard +<br/>/dev/mailbox behind Caddy basic auth"]
             nbdb[("postgis 18-3.6<br/>pgdata volume")]
+            nbmp["mailpit — SMTP relay,<br/>UI loopback-only (ssh -L 8026)"]
         end
 
         subgraph mb["maribelanja.darmawan.be"]
@@ -30,6 +31,7 @@ flowchart LR
     caddy -->|"proxy network"| nbapp
     caddy -->|"proxy network"| mbapp
     nbapp --> nbdb
+    nbapp -->|"SMTP :1025"| nbmp
     mbapp --> mbdb
     mbapp -->|"SMTP :1025"| mp
 ```
@@ -134,9 +136,11 @@ curl -fsS https://maribelanja.darmawan.be/health        # "ok"
 curl -fsS https://maribelanja.darmawan.be/users/log-in -o /dev/null -w '%{http_code}\n'  # 200
 ```
 
-- **naikbusaja login flow**: request a magic link on the site, then open
-  `https://naikbusaja.darmawan.be/dev/mailbox` (basic auth — password printed
-  by `make secrets`, also in `/opt/caddy/dev-auth-credentials.txt` on the server).
+- **naikbusaja login flow**: request a magic link on the site, then
+  `ssh -L 8026:127.0.0.1:8026 ubuntu@47.131.158.206` → http://localhost:8026
+  (its own Mailpit; 8025 is maribelanja's). The `/dev/mailbox` route still
+  exists behind basic auth but no longer receives mail — the runtime mailer
+  is SMTP (see the naikbusaja staging compose header).
 - **maribelanja mail**: `ssh -L 8025:127.0.0.1:8025 ubuntu@47.131.158.206`
   → http://localhost:8025 (Mailpit; loopback-only by design).
 - **LiveView sanity**: load a page, interact — if forms do nothing, check
@@ -148,14 +152,15 @@ curl -fsS https://maribelanja.darmawan.be/users/log-in -o /dev/null -w '%{http_c
   `check_origin` silently kills LiveView WebSockets otherwise.
 - **Builds one at a time.** The box has 2 vCPU / 3.7 GB; two concurrent Elixir
   builds will OOM. `make deploy` is sequential on purpose.
-- **The `/dev/*` routes are public** (behind basic auth) — that is what makes
-  magic-link logins work without SMTP on naikbusaja. The demo build flags
-  (`DEV_ROUTES_COMPILE`, `MAIL_LOCAL_COMPILE`) are compile-time; changing them
-  means a rebuild.
+- **The `/dev/*` routes are public** (behind basic auth) — demo conveniences,
+  but naikbusaja magic links now arrive via its Mailpit (SSH tunnel), not
+  `/dev/mailbox`. The demo build flags (`DEV_ROUTES_COMPILE`,
+  `MAIL_LOCAL_COMPILE`) are compile-time; changing them means a rebuild.
 - **DB passwords**: naikbusaja keeps the upstream compose defaults (postgres/
   postgres, no published port, internal network only); maribelanja's is
   generated hex in `/opt/maribelanja/.env`.
-- **Mailpit UI is never public** — SSH tunnel only.
+- **Mailpit UI is never public** — SSH tunnel only (naikbusaja on 8026,
+  maribelanja on 8025).
 - **Docker bypasses ufw** for published ports; nothing publishes ports except
   Caddy (80/443) and Mailpit (loopback-bound).
 - **Tailwind vendoring (naikbusaja).** `mix assets.deploy` downloads the

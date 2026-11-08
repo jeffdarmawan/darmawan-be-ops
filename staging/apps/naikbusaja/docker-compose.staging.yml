@@ -5,8 +5,14 @@
 #   docker compose -f docker-compose.staging.yml up -d --build
 #
 # Demo build: DEV_ROUTES_COMPILE + MAIL_LOCAL_COMPILE bake in /dev/mailbox so
-# magic-link logins work without SMTP (both are read at COMPILE time). The
-# /dev/* routes are gated by Caddy basic auth (see staging/caddy/Caddyfile).
+# the /dev/* routes still exist (gated by Caddy basic auth, see
+# staging/caddy/Caddyfile) — but the mailer itself runs SMTP against the
+# bundled Mailpit (SMTP_HOST=mailpit), same as maribelanja. Mailpit's UI is
+# loopback-only on host port 8026 (8025 is maribelanja's) — read magic links
+# through an SSH tunnel:
+#
+#   ssh -L 8026:127.0.0.1:8026 ubuntu@<staging-host>   →  http://localhost:8026
+#
 # First boot runs migrations and imports the transit feed (a few minutes).
 
 name: naikbusaja
@@ -55,9 +61,6 @@ services:
     container_name: naikbusaja-app
     restart: unless-stopped
     <<: *logging
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
       DATABASE_URL: ecto://postgres:postgres@db:5432/naikbusaja_prod
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE is required (mix phx.gen.secret)}
@@ -65,6 +68,22 @@ services:
       PHX_SCHEME: ${PHX_SCHEME:-https}
       PORT: "4000"
       POOL_SIZE: "10"
+      # Staging mail: SMTP relay via the bundled Mailpit (see header). All
+      # defaults point there; a real provider only needs overrides in the
+      # server's .env. Blank username/password = no AUTH keys sent, and
+      # Mailpit accepts any sender (MP_SMTP_AUTH_ACCEPT_ANY in its service).
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SSL: ${SMTP_SSL:-false}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      # Empty falls back to the app default: "NaikBusAja" <no-reply@naikbusaja.local>
+      MAIL_FROM: ${MAIL_FROM:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
     entrypoint: ["/app/bin/docker-entrypoint"]
     command: ["/app/bin/server"]
     networks:
@@ -75,6 +94,19 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
+
+  # Staging mail catcher — also the SMTP relay (SMTP_HOST=mailpit). UI is
+  # loopback-only on purpose: magic links are readable through the SSH tunnel
+  # on host port 8026 (8025 belongs to maribelanja's Mailpit).
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    <<: *logging
+    ports:
+      - "127.0.0.1:8026:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
 
 volumes:
   pgdata:
