@@ -1,7 +1,7 @@
 # Postgres 18 on staging
 
 Date: 2026-11-08
-Status: written, not yet run (execution is manual, one app at a time)
+Status: executed 2026-11-08 — both stacks on Postgres 18.6, logins verified end-to-end
 
 ## What changed
 
@@ -44,7 +44,15 @@ The dump step saves user rows to `/opt/<app>/backups/pg18-users-<timestamp>.sql`
 
 ## Verification
 
-The script's own post-checks: `SHOW server_version` reports 18.x, and each restored table's row count matches what the dump step recorded. Human checks after each app: log in at the staging URL with the test account, and for naikbusaja watch `make logs-naikbusaja` until the transit feed import finishes.
+Executed and verified:
+
+- `SHOW server_version` → 18.6 on both stacks (postgis/postgis:18-3.6 and postgres:18-alpine)
+- Row counts match the dumps: naikbusaja `users`=1, `user_favorite_routes`=0; maribelanja `users`=1
+- All containers healthy; both sites serve over HTTPS
+- maribelanja: password login with `staging-test@darmawan.be` succeeds → `/items` (restored bcrypt hash verifies)
+- naikbusaja: magic-link login succeeds → `/journey`; transit feed re-imported on first boot (246 routes, 704 trips, 8211 stops)
+
+One discovery about the staging test account: the naikbusaja row has **no `hashed_password`** — it was registered through the demo build's magic-link flow, so password login for it never existed and "Invalid email or password" is the correct answer there. The `staging-pass-2026!` credential applies to maribelanja only.
 
 ## Rollback
 
