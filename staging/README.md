@@ -88,6 +88,21 @@ What each deploy does, in order:
 3. **Migrations run automatically** — naikbusaja in its entrypoint on boot,
    maribelanja via the one-shot `migrate` service before the app starts.
 
+> **`.env` never syncs.** The server's `/opt/<app>/.env` is excluded from every
+> rsync — deploys will not add, update, or remove env vars on the server. To
+> change an app's env (e.g. adding `GOOGLE_CLIENT_ID` for new OAuth config):
+>
+> 1. Map the var in `staging/apps/<app>/docker-compose.staging.yml` (this
+>    repo) — compose only passes into the container what the `environment:`
+>    block lists.
+> 2. Add the value on the server: `make ssh`, then edit `/opt/<app>/.env`
+>    (or pipe it in: `grep '^VAR=' <local-.env> | ssh … 'cat >> /opt/<app>/.env'`).
+> 3. Redeploy with `make <app>`.
+>
+> `make secrets` only creates an `.env` the first time (idempotent — it keeps
+> existing files); it will not add vars to one that exists. `staging/apps/<app>/.env.example`
+> documents what each server `.env` should end up containing.
+
 Watching a deploy:
 
 ```bash

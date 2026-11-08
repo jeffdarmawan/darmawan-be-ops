@@ -24,6 +24,11 @@ x-app-env: &app-env
   SMTP_SSL: ${SMTP_SSL:-false}
   SMTP_USERNAME: ${SMTP_USERNAME:-}
   SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  # Google sign-in (Assent): id/secret come from the server's .env (secrets
+  # never live in this repo). Empty = runtime.exs hides the Google buttons.
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  GOOGLE_REDIRECT_URI: https://maribelanja.darmawan.be/auth/google/callback
 
 x-logging: &logging
   logging:
