@@ -29,6 +29,17 @@ x-app-env: &app-env
   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
   GOOGLE_REDIRECT_URI: https://maribelanja.darmawan.be/auth/google/callback
+  # Receipt photo scanning (opencode Go). The key comes from the server's
+  # .env, same as the Google pair. Empty = the upload card says scanning is
+  # not configured. Defaults match the app's config/config.exs.
+  OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
+  RECEIPT_SCAN_PROVIDER: ${RECEIPT_SCAN_PROVIDER:-vision_llm}
+  RECEIPT_SCAN_BASE_URL: ${RECEIPT_SCAN_BASE_URL:-https://opencode.ai/inference/go/openai/v1}
+  RECEIPT_SCAN_MODEL: ${RECEIPT_SCAN_MODEL:-deepseek-v4.1-flash}
+  RECEIPT_SCAN_TIMEOUT_MS: ${RECEIPT_SCAN_TIMEOUT_MS:-120000}
+  RECEIPT_SCAN_STREAM: ${RECEIPT_SCAN_STREAM:-true}
+  RECEIPT_SCAN_STRUCTURED_OUTPUT: ${RECEIPT_SCAN_STRUCTURED_OUTPUT:-json_schema}
+  RECEIPT_SCAN_REASONING_EFFORT: ${RECEIPT_SCAN_REASONING_EFFORT:-low}
 
 x-logging: &logging
   logging:
