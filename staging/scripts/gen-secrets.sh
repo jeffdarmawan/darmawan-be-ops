@@ -24,7 +24,7 @@ fi
 
 # --- maribelanja -------------------------------------------------------------
 if [ -f /opt/maribelanja/.env ]; then
-  echo "maribelanja .env already present — keeping it"
+  echo "maribelanja .env already present — keeping it (add new vars by hand; see staging/docs/receipt-bucket-setup.md)"
 else
   SKB=$(openssl rand -base64 48)
   # Hex is URL-safe — it is embedded into DATABASE_URL verbatim.
@@ -57,6 +57,22 @@ else
   chmod 600 /opt/caddy/.dev-bcrypt /opt/caddy/dev-auth-credentials.txt
   echo "caddy basic auth generated — user: naikbusaja  password: $PW"
   echo "(also saved to /opt/caddy/dev-auth-credentials.txt on the server)"
+fi
+
+# --- caddy basic auth for the admin host -------------------------------------
+# A separate credential from naikbusaja's /dev/*: this one guards
+# admin.maribelanja.darmawan.be, which is a public hostname wrapping the whole
+# admin app. The app still has its own login behind it.
+if [ -f /opt/caddy/.admin-bcrypt ]; then
+  echo "admin basic auth already generated — credentials in /opt/caddy/admin-auth-credentials.txt"
+else
+  PW=$(openssl rand -hex 12)
+  docker run --rm caddy:2-alpine caddy hash-password --plaintext "$PW" > /opt/caddy/.admin-bcrypt
+  printf 'admin.maribelanja.darmawan.be basic auth (set in /opt/caddy/Caddyfile)\nuser: admin\npassword: %s\n' "$PW" \
+    > /opt/caddy/admin-auth-credentials.txt
+  chmod 600 /opt/caddy/.admin-bcrypt /opt/caddy/admin-auth-credentials.txt
+  echo "admin basic auth generated — user: admin  password: $PW"
+  echo "(also saved to /opt/caddy/admin-auth-credentials.txt on the server)"
 fi
 
 echo "== secrets ready =="

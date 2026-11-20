@@ -40,6 +40,21 @@ x-app-env: &app-env
   RECEIPT_SCAN_STREAM: ${RECEIPT_SCAN_STREAM:-true}
   RECEIPT_SCAN_STRUCTURED_OUTPUT: ${RECEIPT_SCAN_STRUCTURED_OUTPUT:-json_schema}
   RECEIPT_SCAN_REASONING_EFFORT: ${RECEIPT_SCAN_REASONING_EFFORT:-low}
+  # Receipt photo storage. Both S3 vars are required on purpose: the bucket
+  # exists and an empty value would silently fall back to container disk,
+  # losing photos on the next rebuild. Credentials are the scoped IAM user;
+  # this box has no instance role. Setup: staging/docs/receipt-bucket-setup.md
+  RECEIPT_IMAGE_BUCKET: ${RECEIPT_IMAGE_BUCKET:?RECEIPT_IMAGE_BUCKET is required}
+  RECEIPT_IMAGE_REGION: ${RECEIPT_IMAGE_REGION:?RECEIPT_IMAGE_REGION is required}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is required}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is required}
+  # Admin app (admin.maribelanja.darmawan.be). These only build the links in
+  # admin password-reset emails, so they name the public URL Caddy terminates,
+  # not the internal port. APP_ROLE is set per service below.
+  ADMIN_PORT: ${ADMIN_PORT:-4001}
+  ADMIN_HOST: ${ADMIN_HOST:?ADMIN_HOST is required}
+  ADMIN_SCHEME: ${ADMIN_SCHEME:-https}
+  ADMIN_URL_PORT: ${ADMIN_URL_PORT:-443}
 
 x-logging: &logging
   logging:
@@ -92,7 +107,35 @@ services:
     container_name: maribelanja-app
     restart: unless-stopped
     <<: *logging
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Customer traffic only; the admin surface lives on the admin service.
+      APP_ROLE: customer
+    networks:
+      - default
+      - proxy
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+
+  # Admin app, same image, second release. Serves only the admin endpoint and
+  # also owns the daily stats aggregation job. Published on the proxy network
+  # under admin.maribelanja.darmawan.be; Caddy adds basic auth in front.
+  admin:
+    build:
+      context: .
+    image: maribelanja:latest
+    container_name: maribelanja-admin
+    restart: unless-stopped
+    <<: *logging
+    command: ["/app-admin/bin/server"]
+    environment:
+      <<: *app-env
+      APP_ROLE: admin
     networks:
       - default
       - proxy

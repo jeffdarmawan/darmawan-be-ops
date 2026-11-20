@@ -8,6 +8,9 @@
 # __NAIKBUSAJA_DEV_BCRYPT__ is replaced by `make caddy` (staging/Makefile)
 # with a bcrypt hash protecting naikbusaja's dev routes on the public
 # internet. Credentials: /opt/caddy/dev-auth-credentials.txt on the server.
+#
+# __ADMIN_BCRYPT__ is the same mechanism for the admin app host.
+# Credentials: /opt/caddy/admin-auth-credentials.txt on the server.
 
 {
 	# Staging uses the default Let's Encrypt issuer. If certificates get
@@ -28,6 +31,38 @@ maribelanja.darmawan.be {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+# Admin app. A public hostname, so it sits behind its own basic auth on top of
+# the app's own login — same reasoning as naikbusaja's /dev/* routes. If this
+# ever needs to be stricter, drop the hostname and use the SSH tunnel instead:
+#   ssh -L 4001:127.0.0.1:4001 ubuntu@<host>  (requires publishing the admin
+#   container's port to 127.0.0.1 in docker-compose.staging.yml)
+admin.maribelanja.darmawan.be {
+	encode zstd gzip
+
+	basic_auth {
+		admin __ADMIN_BCRYPT__
+	}
+
+	reverse_proxy maribelanja-admin:4001 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# The admin app is not for indexing.
+		X-Robots-Tag "noindex, nofollow"
 		-Server
 	}
 

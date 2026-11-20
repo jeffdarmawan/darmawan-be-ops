@@ -127,13 +127,22 @@ Caveats:
   `make caddy` re-syncs the Caddyfile; app compose changes ride along with
   the next `make <app>` (they are copied on every deploy).
 
+## Receipt photos (S3) and the admin app
+
+The maribelanja photo-storage and admin work needs a private S3 bucket and
+a second container. Setup is written up in
+[receipt-bucket-setup.md](docs/receipt-bucket-setup.md): AWS resources, the
+IAM policy, the env vars, and how to verify it. The staging box has no
+instance role, so it uses a scoped access key rather than the role prod uses.
+
 ## Smoke tests
 
 ```bash
 curl -sI http://naikbusaja.darmawan.be | head -3        # 308 → https
 curl -fsS https://naikbusaja.darmawan.be -o /dev/null -w '%{http_code}\n'  # 200
 curl -fsS https://maribelanja.darmawan.be/health        # "ok"
-curl -fsS https://maribelanja.darmawan.be/users/log-in -o /dev/null -w '%{http_code}\n'  # 200
+curl -fsS https://maribelanja.darmawan.be/users/login -o /dev/null -w '%{http_code}\n'  # 200
+curl -s -o /dev/null -w '%{http_code}\n' https://admin.maribelanja.darmawan.be/login  # 401 (basic auth)
 ```
 
 - **naikbusaja login flow**: request a magic link on the site, then

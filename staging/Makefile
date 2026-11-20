@@ -29,7 +29,11 @@ MARIBELANJA_DIR ?= /Users/jeffdarmawan/projects/elixir/github.com/jeffdarmawan/m
 APP_EXCLUDES = --exclude .git --exclude .DS_Store --exclude _build --exclude deps \
                --exclude node_modules --exclude .env --exclude docker-compose.staging.yml
 
-CADDY_EXCLUDES = --exclude .DS_Store --exclude .dev-bcrypt --exclude dev-auth-credentials.txt
+# Server-only secrets under /opt/caddy are excluded so --delete never removes
+# them: the rsync runs before the files are referenced, and losing them means
+# the basic auth hashes have to be regenerated.
+CADDY_EXCLUDES = --exclude .DS_Store --exclude .dev-bcrypt --exclude dev-auth-credentials.txt \
+                 --exclude .admin-bcrypt --exclude admin-auth-credentials.txt
 
 .PHONY: help check bootstrap secrets caddy naikbusaja maribelanja deploy ssh \
         ps logs-caddy logs-naikbusaja logs-maribelanja pg18-dump pg18-upgrade
@@ -64,7 +68,9 @@ secrets:
 caddy: secrets
 	$(RSYNC) $(CADDY_EXCLUDES) caddy/ $(HOST):/opt/caddy/
 	$(SSH) 'test -f /opt/caddy/.dev-bcrypt || { echo "missing /opt/caddy/.dev-bcrypt — run make secrets"; exit 1; }; \
+	  test -f /opt/caddy/.admin-bcrypt || { echo "missing /opt/caddy/.admin-bcrypt — run make secrets"; exit 1; }; \
 	  sed -i "s|__NAIKBUSAJA_DEV_BCRYPT__|$$(cat /opt/caddy/.dev-bcrypt)|" /opt/caddy/Caddyfile; \
+	  sed -i "s|__ADMIN_BCRYPT__|$$(cat /opt/caddy/.admin-bcrypt)|" /opt/caddy/Caddyfile; \
 	  cd /opt/caddy && docker compose up -d && docker compose ps'
 	@echo "caddy up — watch cert issuance: make logs-caddy"
 
